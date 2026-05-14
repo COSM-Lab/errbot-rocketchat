@@ -1283,29 +1283,28 @@ class RocketChat(ErrBot):
 
         :return: None.
         """
-        # Call super method to dispatch to plugins
         super(RocketChat, self).send_message(mess)
 
-        # Get original message object.
-        #
-        # The key is set at 5QXGV and 3YRCT.
-        #
         orig_msg = mess.extras['orig_msg']
-
-        # Get original message info.
-        #
-        # The key is set at 2QTGO
-        #
         msg_info = orig_msg.extras['msg_info']
-
-        # Get room ID
         room_id = msg_info['rid']
 
-        # Send message to meteor server
-        self.send_rocketchat_message(params={
+        # 1. Extract the message ID from the original message info
+        # In Rocket.Chat, the unique message ID is usually in the '_id' field
+        thread_id = msg_info.get('_id')
+
+        # 2. Build the outgoing parameters
+        params = {
             'rid': room_id,
             'msg': mess.body,
-        })
+        }
+
+        # 3. If this is a reply, attach the tmid to start/continue the thread
+        if thread_id:
+            params['tmid'] = thread_id
+
+        # Send message to meteor server
+        self.send_rocketchat_message(params=params)
 
     def send(
         self,
