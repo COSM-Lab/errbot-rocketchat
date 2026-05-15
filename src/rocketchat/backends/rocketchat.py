@@ -421,6 +421,10 @@ class RocketChat(ErrBot):
         #
         self._meteor_closed_event = Event()
 
+        # Adding a cache to avoid messages re-rpocessing after replying in
+        # a loop or reacting to them
+        self._processed_msg_ids = set()
+
     @property
     def mode(self):
         """
@@ -1049,6 +1053,25 @@ class RocketChat(ErrBot):
 
                         # If the sender is not the bot itself
                         if sender_username != self._login_username:
+
+                            # --- NEW DE-DUPLICATION CHECK START ---
+                            msg_id = msg_info.get('_id')
+                            
+                            # If we've already dispatched this exact message ID, 
+                            # ignore subsequent metadata updates to it.
+                            if msg_id in self._processed_msg_ids:
+                                self._log_debug(f"Skipping duplicate stream notification for message ID: {msg_id}")
+                                continue
+                            
+                            # Record this message ID
+                            self._processed_msg_ids.add(msg_id)
+                            
+                            # Keep cache size small to avoid memory bloat
+                            if len(self._processed_msg_ids) > 500:
+                                # Pop an arbitrary old item out
+                                self._processed_msg_ids.pop()
+                            # --- NEW DE-DUPLICATION CHECK END ---
+
                             # Create sender's identifier object
                             sender_identifier = self.build_identifier(
                                 sender_username
