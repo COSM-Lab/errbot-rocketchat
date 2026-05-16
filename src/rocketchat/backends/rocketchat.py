@@ -1325,6 +1325,9 @@ class RocketChat(ErrBot):
         # 3. If this is a reply, attach the tmid to start/continue the thread
         if thread_id:
             params['tmid'] = thread_id
+        
+        if 'params' in mess.extras and isinstance(mess.extras['params'], dict):
+            params.update(mess.extras['params'])
 
         # Send message to meteor server
         self.send_rocketchat_message(params=params)
