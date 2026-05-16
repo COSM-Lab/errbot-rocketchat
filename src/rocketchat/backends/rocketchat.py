@@ -1413,6 +1413,26 @@ class RocketChat(ErrBot):
             callback=query_user_callback
         )
 
+    def send_typing_status(self, room_id, is_typing=True):
+        """
+        Sends a native Rocket.Chat typing indicator to the specified room.
+        """
+        # The stream expects: room_id/typing, username, and a boolean status
+        typing_event = f"{room_id}/typing"
+        
+        params = {
+            "msg": "method",
+            "method": "stream-notify-room",
+            "params": [
+                typing_event,
+                self._login_username,
+                is_typing
+            ]
+        }
+        
+        # Dispatch using your existing meteor call wrapper
+        self.send_rocketchat_message(params=params)
+
     def query_room(self, room):
         """
         Query room info. Not implemented.
@@ -1444,3 +1464,6 @@ class RocketChat(ErrBot):
         :return: None.
         """
         # Do nothing
+
+    def set_typing(self, room_id, is_typing=True):
+        self.send_typing_status(room_id, is_typing)
