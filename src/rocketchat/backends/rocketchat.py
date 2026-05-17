@@ -1308,6 +1308,14 @@ class RocketChat(ErrBot):
         """
         super(RocketChat, self).send_message(mess)
 
+        if 'typing_status' in mess.extras:
+            room_id = mess.extras.get('room_id')
+            is_typing = mess.extras.get('typing_status', True)
+            if room_id:
+                # Call your internal method directly
+                self.send_typing_status(room_id, is_typing)
+            return # Exit early so we don't send an empty text message
+
         orig_msg = mess.extras['orig_msg']
         msg_info = orig_msg.extras['msg_info']
         room_id = msg_info['rid']
@@ -1464,6 +1472,3 @@ class RocketChat(ErrBot):
         :return: None.
         """
         # Do nothing
-
-    def set_typing(self, room_id, is_typing=True):
-        self.send_typing_status(room_id, is_typing)
