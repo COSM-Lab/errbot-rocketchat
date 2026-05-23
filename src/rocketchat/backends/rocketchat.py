@@ -225,7 +225,6 @@ class RocketChatRoom(Room):
     def __str__(self):
         return self._room_id
 
-
 class RocketChatRoomOccupant(Person, RoomOccupant):
     """
     Represents a specific user inside a specific Rocket.Chat room context.
@@ -1507,16 +1506,29 @@ class RocketChat(ErrBot):
                 body=text,
                 frm=identifier,
                 to=self.bot_identifier,
-                extras={"msg_info": args[1]}
+                extras={"msg_info": args[1] if len(args) > 1 else {}}
             )
-            # Re-enter send() method.
+            # Re-enter send() method with built context
             self.send(identifier, text, in_reply_to)
 
-        self._meteor_client.call(
-            method="createDirectMessage",
-            params=[identifier.person],
-            callback=query_user_callback
-        )
+        # Check if the destination is a Room instance or a User instance
+        if isinstance(identifier, Room):
+            # It's a channel/group/discussion! We don't need to create a DM channel.
+            # Construct an artificial reply directly inside the target room stream.
+            mock_reply = Message(
+                body=text,
+                frm=self.bot_identifier,
+                to=identifier,
+                extras={"msg_info": {"rid": identifier.id}}
+            )
+            self.send(identifier, text, mock_reply)
+        else:
+            # It's a user! Proceed with creating a Direct Message stream stream.
+            self._meteor_client.call(
+                method="createDirectMessage",
+                params=[identifier.person],
+                callback=query_user_callback
+            )
 
     def send_typing_status(self, room_id, is_typing=True):
         """
