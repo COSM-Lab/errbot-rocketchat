@@ -23,6 +23,7 @@ from errbot.backends.base import Message
 from errbot.backends.base import Person
 from errbot.backends.base import Presence
 from errbot.backends.base import Room
+from errbot.backends.base import RoomOccupant
 from errbot.core import ErrBot
 
 
@@ -181,6 +182,69 @@ _CONFIG_OBJ_KEY = 'ROCKETCHAT_CONFIG'
 #
 _ENV_VAR_NAME_PREFIX = 'ROCKETCHAT_'
 
+class RocketChatRoom(Room):
+    """
+    Represents a concrete Rocket.Chat channel, group, or discussion.
+    """
+    def __init__(self, room_id, backend):
+        self._room_id = room_id
+        self._backend = backend
+
+    @property
+    def id(self):
+        return self._room_id
+
+    def join(self, username=None, password=None):
+        """Invoke the backend API wrapper to join this room."""
+        if hasattr(self._backend, 'join_room'):
+            self._backend.join_room(self._room_id)
+
+    def leave(self, reason=None):
+        """Invoke the backend API wrapper to leave this room."""
+        if hasattr(self._backend, 'leave_room'):
+            self._backend.leave_room(self._room_id)
+
+    @property
+    def exists(self):
+        # Can be linked to an API lookup later if needed
+        return True
+
+    @property
+    def joined(self):
+        return True
+
+    def __str__(self):
+        return self._room_id
+
+
+class RocketChatRoomOccupant(Person, RoomOccupant):
+    """
+    Represents a specific user inside a specific Rocket.Chat room context.
+    Essential for tracking WHO said WHAT and WHERE.
+    """
+    def __init__(self, username, room_id, backend):
+        self._username = username
+        self._room_id = room_id
+        self._backend = backend
+
+    @property
+    def person(self):
+        return self._username
+
+    @property
+    def nick(self):
+        return self._username
+
+    @property
+    def fullname(self):
+        return self._username
+
+    @property
+    def room(self):
+        return RocketChatRoom(self._room_id, self._backend)
+
+    def __str__(self):
+        return self._username
 
 class RocketChatUser(Person):
     """
@@ -593,13 +657,8 @@ class RocketChat(ErrBot):
 
     def build_identifier(self, txtrep):
         """
-        Transforms a textual representation of an identifier into the correct 
-        native Identifier object (User, Room, or RoomOccupant).
-
-        Supports:
-        - '@username' -> Direct User context
-        - '#channel_name' -> Human-readable channel
-        - Raw IDs (e.g., database keys or hashes like 'GENERAL', 'xYzA1234') -> RoomId
+        Transforms a textual representation into a strict, strongly-typed
+        Errbot Identifier object.
         """
         if not txtrep or not isinstance(txtrep, str):
             raise ValueError("Identifier representation must be a non-empty string.")
@@ -608,25 +667,21 @@ class RocketChat(ErrBot):
 
         # 1. Handle Explicit Usernames (@username)
         if txtrep.startswith('@'):
-            username = txtrep.lstrip('@')
-            # Ensure your backend's RocketChatUser class accepts either just the name 
-            # or the backend instance as context depending on your architecture.
-            try:
-                return self.RocketChatUser(self, username)
-            except TypeError:
-                return self.RocketChatUser(username)
+            return RocketChatUser(txtrep.lstrip('@'))
 
         # 2. Handle Human-Readable Channels (#channel)
         if txtrep.startswith('#'):
             channel_name = txtrep.lstrip('#')
-            # If your backend requires a lookup mechanism to turn '#general' into an ID, 
-            # invoke it here. Otherwise, map directly to the Room ID wrapper.
             room_id = self.get_room_id_by_name(channel_name) if hasattr(self, 'get_room_id_by_name') else channel_name
-            return self.RoomId(self, node=room_id)
+            return RocketChatRoom(room_id, self)
 
-        # 3. Handle Raw IDs / Hashes (e.g., 'GENERAL' or a complex Mongo ID)
-        # If it falls through the prefix check, treat it directly as a Room/Stream Identification.
-        return self.RoomId(self, node=txtrep)
+        # 3. Handle System Initialization Guard
+        # Keeps startup clean when setting up self.bot_identifier using the raw login string
+        if txtrep == getattr(self, '_login_username', None):
+            return RocketChatUser(txtrep)
+
+        # 4. Handle Raw IDs / Hashes (Default to a concrete Room target)
+        return RocketChatRoom(txtrep, self)
 
     def serve_forever(self):
         """
