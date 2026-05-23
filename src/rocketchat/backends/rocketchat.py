@@ -212,6 +212,15 @@ class RocketChatRoom(Room):
     @property
     def joined(self):
         return True
+    
+    # Add this property inside your RocketChatRoom class:
+    @property
+    def person(self):
+        """
+        Returns the room ID. 
+        Allows create_reply_msg to gracefully fall back when sending to a room context.
+        """
+        return self._room_id
 
     def __str__(self):
         return self._room_id
@@ -675,12 +684,19 @@ class RocketChat(ErrBot):
             room_id = self.get_room_id_by_name(channel_name) if hasattr(self, 'get_room_id_by_name') else channel_name
             return RocketChatRoom(room_id, self)
 
-        # 3. Handle System Initialization Guard
-        # Keeps startup clean when setting up self.bot_identifier using the raw login string
-        if txtrep == getattr(self, '_login_username', None):
+        # 3. Handle System Configurations and Bot Admins
+        # If the text matches the login name or is found in the BOT_ADMINS list, it's definitely a user.
+        bot_admins = getattr(self.bot_config, 'BOT_ADMINS', [])
+        if txtrep == getattr(self, '_login_username', None) or txtrep in bot_admins:
             return RocketChatUser(txtrep)
 
-        # 4. Handle Raw IDs / Hashes (Default to a concrete Room target)
+        # 4. Handle Raw IDs / Hashes vs Usernames
+        # Rocket.Chat room hashes/ids are usually case-sensitive alpha-numeric strings.
+        # If it is all lowercase and short, or matches standard username rules, default to User.
+        # Otherwise, safely treat it as a RocketChatRoom targeting a stream.
+        if txtrep.islower() and len(txtrep) < 15:
+            return RocketChatUser(txtrep)
+
         return RocketChatRoom(txtrep, self)
 
     def serve_forever(self):
