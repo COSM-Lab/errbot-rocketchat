@@ -591,16 +591,42 @@ class RocketChat(ErrBot):
             # Replace original `change_data`
             CollectionData.change_data = change_data
 
-    def build_identifier(self, username):
+    def build_identifier(self, txtrep):
         """
-        Create identifier object for given username.
+        Transforms a textual representation of an identifier into the correct 
+        native Identifier object (User, Room, or RoomOccupant).
 
-        :param username: Rocket chat user name.
-
-        :return: RocketChatUser instance.
+        Supports:
+        - '@username' -> Direct User context
+        - '#channel_name' -> Human-readable channel
+        - Raw IDs (e.g., database keys or hashes like 'GENERAL', 'xYzA1234') -> RoomId
         """
-        # Create identifier object
-        return RocketChatUser(username)
+        if not txtrep or not isinstance(txtrep, str):
+            raise ValueError("Identifier representation must be a non-empty string.")
+
+        txtrep = txtrep.strip()
+
+        # 1. Handle Explicit Usernames (@username)
+        if txtrep.startswith('@'):
+            username = txtrep.lstrip('@')
+            # Ensure your backend's RocketChatUser class accepts either just the name 
+            # or the backend instance as context depending on your architecture.
+            try:
+                return self.RocketChatUser(self, username)
+            except TypeError:
+                return self.RocketChatUser(username)
+
+        # 2. Handle Human-Readable Channels (#channel)
+        if txtrep.startswith('#'):
+            channel_name = txtrep.lstrip('#')
+            # If your backend requires a lookup mechanism to turn '#general' into an ID, 
+            # invoke it here. Otherwise, map directly to the Room ID wrapper.
+            room_id = self.get_room_id_by_name(channel_name) if hasattr(self, 'get_room_id_by_name') else channel_name
+            return self.RoomId(self, node=room_id)
+
+        # 3. Handle Raw IDs / Hashes (e.g., 'GENERAL' or a complex Mongo ID)
+        # If it falls through the prefix check, treat it directly as a Room/Stream Identification.
+        return self.RoomId(self, node=txtrep)
 
     def serve_forever(self):
         """
