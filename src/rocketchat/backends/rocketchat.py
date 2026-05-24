@@ -1445,59 +1445,46 @@ class RocketChat(ErrBot):
     ):
         """
         Send message to meteor server.
-
-        :param identifier: Receiver's identifier object.
-
-        :param text: Message text to send.
-
-        :param in_reply_to: Original message object.
-
-        :param groupchat_nick_reply: Whether the message to send is group chat.
-
-        `self.prefix_groupchat_reply` will be called to process the message if
-        it is group chat.
-
-        :return: None.
         """
-        # If the identifier object is not Identifier instance
         if not isinstance(identifier, Identifier):
-            # Get message
-            error_msg = (
-                'Argument `identifier` is not Identifier instance: {}'
-            ).format(repr(identifier))
-
-            # Raise error
+            error_msg = f'Argument `identifier` is not Identifier instance: {repr(identifier)}'
             raise ValueError(error_msg)
 
-        # If the original message is not given, emulate receiving a message to confirm with.
+        # If the background event has no context, invoke our custom builder
         if in_reply_to is None:
             self.create_reply_msg(identifier, text)
             return True
 
-        # Create message object
+        # --- THE ARCHITECTURAL FIX ---
+        # Safely extract or inject the Room Stream ID (rid)
+        # If in_reply_to has an existing msg_info layout, preserve it. Otherwise, target the room id directly.
+        orig_extras = getattr(in_reply_to, 'extras', {}) or {}
+        orig_msg_info = orig_extras.get('msg_info', {}) or {}
+        
+        # If targeting a RocketChatRoom, force ensure the stream ID is packed correctly
+        room_id = identifier.id if isinstance(identifier, RocketChatRoom) else orig_msg_info.get('rid')
+
         msg_obj = Message(
             body=text,
             frm=in_reply_to.to,
             to=identifier,
             extras={
-                # 3YRCT
-                # Store the original message object
                 'orig_msg': in_reply_to,
+                'msg_info': {
+                    'rid': room_id,
+                    't': 'c' if isinstance(identifier, RocketChatRoom) else 'd'
+                }
             },
         )
 
         # Get group chat prefix from config
         group_chat_prefix = self.bot_config.GROUPCHAT_NICK_PREFIXED
 
-        # If the receiver is a room
         if isinstance(identifier, Room):
-            # If have group chat prefix,
-            # or the message is group chat.
             if group_chat_prefix or groupchat_nick_reply:
-                # Call `prefix_groupchat_reply` to process the message
                 self.prefix_groupchat_reply(msg_obj, in_reply_to.frm)
 
-        # Send the message
+        # Dispatch to the underlying socket/client transmission handler
         self.split_and_send_message(msg_obj)
 
     def create_reply_msg(self, identifier, text):
