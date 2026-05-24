@@ -1383,11 +1383,7 @@ class RocketChat(ErrBot):
         }
 
         # 5. Dispatch via your DDP/Meteor Client
-        # Replace 'sendMessage' with your backend's specific method if it uses a custom helper
-        self._meteor_client.call(
-            method="sendMessage",
-            params=[msg_payload]
-        )
+        self.send_rocketchat_message(params=msg_payload)
 
     def send_message(self, mess):
         """
