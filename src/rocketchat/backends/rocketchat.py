@@ -1349,10 +1349,7 @@ class RocketChat(ErrBot):
 
         # 1. Resolve the destination room ID using our updated architecture
         destination = card.to
-        # If targeting a RocketChatRoom, force ensure the stream ID is packed correctly
-        orig_extras = getattr(card.in_reply_to or {}, 'extras', {}) or {}
-        orig_msg_info = orig_extras.get('msg_info', {}) or {}
-        room_id = destination.id if isinstance(destination, RocketChatRoom) else orig_msg_info.get('rid')
+        room_id = destination.id if isinstance(destination, Room) else destination.person
 
         # 2. Map Errbot Card properties to Rocket.Chat Attachment format
         attachment = {
