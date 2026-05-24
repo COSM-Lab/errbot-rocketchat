@@ -1337,59 +1337,60 @@ class RocketChat(ErrBot):
             params=params,
         )
 
-    def send_card(self, card: Card) -> None:
+    from errbot.backends.base import Card, Room
+
+    def send_card(self, card: Card):
         """
-        Send message to meteor server with an attachment.
-
-        :param card: The information used to build the Rocket Chat attachment.
-        :return: None
+        Transforms an Errbot Card object into a native Rocket.Chat 
+        message payload featuring structured attachments and color bars.
         """
+        if not isinstance(card, Card):
+            raise ValueError("Argument `card` must be an instance of Card.")
 
-        # Get original message info.
-        #
-        # The key is set at 2QTGO
-        #
-        msg_info = card.parent.extras['msg_info']
+        # 1. Resolve the destination room ID using our updated architecture
+        destination = card.to
+        # If targeting a RocketChatRoom, force ensure the stream ID is packed correctly
+        orig_extras = getattr(in_reply_to, 'extras', {}) or {}
+        orig_msg_info = orig_extras.get('msg_info', {}) or {}
+        room_id = destination.id if isinstance(destination, RocketChatRoom) else orig_msg_info.get('rid')
 
-        # Get room ID
-        room_id = msg_info['rid']
+        # 2. Map Errbot Card properties to Rocket.Chat Attachment format
+        attachment = {
+            "title": card.title if card.title else "",
+            "text": card.body if card.body else "",
+            "color": card.color if card.color else "#0071bc", # Default blue bar
+        }
 
-        attachment = {}
-        if card.color:
-            attachment['color'] = card.color
-
-        if card.title:
-            attachment['title'] = card.title
-
-        if card.link:
-            attachment['title_link'] = card.link
-
-        if card.summary:
-            attachment['text'] = card.summary
-
-        if card.image:
-            attachment['image_url'] = card.image
-
+        # Add optional thumbnail/image if provided
         if card.thumbnail:
-            attachment['thumb_url'] = card.thumbnail
+            attachment["thumb_url"] = card.thumbnail
+        if card.image:
+            attachment["image_url"] = card.image
 
-        if len(card.fields) > 0:
-            fields = []
-            for field in card.fields:
-                fields.append({
-                    'title': field[0],
-                    'value': field[1]
-                })
-            attachment['fields'] = fields
-
-        # Send message to meteor server
-        self.send_rocketchat_message(params={
-            'rid': room_id,
-            'msg': card.body,
-            'attachments': [
-                attachment
+        # 3. Map Card Fields to Structured Attachment Fields
+        if card.fields:
+            attachment["fields"] = [
+                {
+                    "title": f_title,
+                    "value": f_content,
+                    "short": len(str(f_content)) < 25 # Side-by-side if short
+                }
+                for f_title, f_content in card.fields
             ]
-        })
+
+        # 4. Construct the final Message Payload structure
+        msg_payload = {
+            "rid": room_id,
+            "msg": card.summary if card.summary else "", # Main text above the card
+            "attachments": [attachment]
+        }
+
+        # 5. Dispatch via your DDP/Meteor Client
+        # Replace 'sendMessage' with your backend's specific method if it uses a custom helper
+        self._meteor_client.call(
+            method="sendMessage",
+            params=[msg_payload]
+        )
 
     def send_message(self, mess):
         """
