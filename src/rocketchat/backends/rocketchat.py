@@ -1350,7 +1350,7 @@ class RocketChat(ErrBot):
         # 1. Resolve the destination room ID using our updated architecture
         destination = card.to
         # If targeting a RocketChatRoom, force ensure the stream ID is packed correctly
-        orig_extras = getattr(in_reply_to, 'extras', {}) or {}
+        orig_extras = getattr(card.in_reply_to or {}, 'extras', {}) or {}
         orig_msg_info = orig_extras.get('msg_info', {}) or {}
         room_id = destination.id if isinstance(destination, RocketChatRoom) else orig_msg_info.get('rid')
 
