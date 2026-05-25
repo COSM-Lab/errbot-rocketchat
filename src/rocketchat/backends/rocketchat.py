@@ -1346,8 +1346,6 @@ class RocketChat(ErrBot):
         Renders an Errbot Card using high-fidelity Markdown blocks,
         bypassing the strict DDP schema limitation natively.
         """
-        room_id = card.to.id if hasattr(card.to, 'id') else str(card.to)
-
         # 1. Start with the summary or title as a header
         lines = []
         if card.summary:
@@ -1369,7 +1367,7 @@ class RocketChat(ErrBot):
         # Safely extract the original reply message using Errbot's 'parent' attribute mapping
         parent_msg = getattr(card, 'parent', None)
 
-        self.send(room_id, full_markdown_text, in_reply_to=parent_msg)
+        self.send(card.to, full_markdown_text, in_reply_to=parent_msg)
 
     def send_message(self, mess):
         """
