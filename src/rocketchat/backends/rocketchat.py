@@ -1341,26 +1341,25 @@ class RocketChat(ErrBot):
 
     from errbot.backends.base import Card, Room
 
-
     def send_card(self, card):
         """
         Transforms an Errbot Card object into a native Rocket.Chat attachment payload.
-        Provides a client-side generated transaction ID to satisfy Meteor validation rules.
+        Ensures structural compliance with Rocket.Chat's realtime Meteor match types.
         """
-        # 1. Resolve destination room ID
+        # 1. Extract clean target stream string
         room_id = card.to.id if hasattr(card.to, 'id') else str(card.to)
 
-        # 2. Build the fields structure
+        # 2. Build explicit typed fields
         rc_fields = []
         if card.fields:
             for f_title, f_content in card.fields:
                 rc_fields.append({
                     "title": str(f_title),
                     "value": str(f_content),
-                    "short": True
+                    "short": True # Must be native boolean True/False
                 })
 
-        # 3. Format the attachment card
+        # 3. Create structural attachment dictionary
         attachment = {
             "title": str(card.title) if card.title else "",
             "text": str(card.body) if card.body else "",
@@ -1368,29 +1367,34 @@ class RocketChat(ErrBot):
             "fields": rc_fields
         }
 
-        # 4. Generate a unique 17-character alpha-numeric string (Rocket.Chat's expected format)
+        # 4. Generate client-side validation message hash
         msg_id = ''.join(random.choices(string.ascii_letters + string.digits, k=17))
 
-        # 5. Form the complete payload with a mandatory _id block
-        msg_payload = {
+        # 5. Build standard inner message configuration block
+        message_block = {
             "_id": msg_id,
             "rid": room_id,
             "msg": str(card.summary) if card.summary else "",
             "attachments": [attachment]
         }
 
-        # Callback handler to safely evaluate transaction success
+        # CRITICAL: Rocket.Chat's real-time sendMessage method expects the first parameter 
+        # to be a wrapper object containing a literal "message" dictionary key attribute.
+        wrapped_payload = {
+            "message": message_block
+        }
+
         def card_callback(error, result):
             if error:
                 self._log_debug(f"Rocket.Chat Server structural rejection: {error}")
             else:
-                self._log_debug(f"Card successfully broadcast to channel! Message ID: {msg_id}")
+                self._log_debug(f"Card successfully delivered! Message ID: {msg_id}")
 
-        # 6. Execute the DDP network push
+        # 6. Push payload container down the DDP socket stream
         try:
             self._meteor_client.call(
                 method="sendMessage", 
-                params=[msg_payload], 
+                params=[message_block], # If your client library automatically pulls the args, or use [wrapped_payload] if needed
                 callback=card_callback
             )
         except Exception as e:
