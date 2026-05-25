@@ -1341,7 +1341,7 @@ class RocketChat(ErrBot):
 
     from errbot.backends.base import Card, Room
 
-    def send_card(self, card, in_reply_to=None):
+    def send_card(self, card):
         """
         Renders an Errbot Card using high-fidelity Markdown blocks,
         bypassing the strict DDP schema limitation natively.
@@ -1372,26 +1372,33 @@ class RocketChat(ErrBot):
             "msg": full_markdown_text
         }
 
-        # 4. Handle Threading (tmid)
-        # Determine if there's a parent message context to thread into
-        parent_msg = in_reply_to or getattr(card, 'in_reply_to', None)
+        # 4. Extract Thread Metadata (tmid) matching Errbot's internal property mapping
+        parent_msg = getattr(card, 'in_reply_to', None)
         
         if parent_msg:
-            # Rocket.Chat message IDs are stored inside the extra message info or message ID attributes
-            # Depending on how your backend parses incoming messages, grab its unique server '_id'
             parent_id = None
             
-            if hasattr(parent_msg, 'extras') and 'msg_info' in parent_msg.extras:
-                parent_id = parent_msg.extras['msg_info'].get('_id')
-            elif hasattr(parent_msg, 'id'):
+            # Scenario A: Try extracting the raw Rocket.Chat message ID hash from extras
+            if hasattr(parent_msg, 'extras') and parent_msg.extras:
+                msg_info = parent_msg.extras.get('msg_info', {}) or {}
+                parent_id = msg_info.get('_id')
+                
+                # Fallback check if your scheduler stored it under a different sub-key
+                if not parent_id and 'orig_msg' in parent_msg.extras:
+                    orig = parent_msg.extras['orig_msg']
+                    if hasattr(orig, 'extras') and orig.extras:
+                        parent_id = orig.extras.get('msg_info', {}).get('_id')
+
+            # Scenario B: Try extracting the generic Errbot ID attribute if available
+            if not parent_id and hasattr(parent_msg, 'id'):
                 parent_id = parent_msg.id
 
-            # If we successfully found the parent message ID, attach it as the thread root
+            # If we successfully isolated a string token ID, inject it into the DDP schema
             if parent_id:
                 msg_payload["tmid"] = str(parent_id)
                 
-                # Optional: 'tshow' makes the threaded reply also broadcast to the main channel
-                # msg_payload["tshow"] = False 
+                # Optional: Set to True if you want the threaded card to also show up in the main room stream
+                # msg_payload["tshow"] = False
 
         # 5. Dispatch safely via the working DDP text stream
         self._meteor_client.call("sendMessage", [msg_payload])
