@@ -1339,51 +1339,59 @@ class RocketChat(ErrBot):
 
     from errbot.backends.base import Card, Room
 
-    def send_card(self, card: Card):
+    def send_card(self, card):
         """
-        Transforms an Errbot Card object into a native Rocket.Chat 
-        message payload featuring structured attachments and color bars.
+        Transforms an Errbot Card object into a native Rocket.Chat attachment payload.
         """
-        if not isinstance(card, Card):
-            raise ValueError("Argument `card` must be an instance of Card.")
+        # 1. Resolve destination room ID
+        # Since target_id is a RocketChatRoom, card.to.id will give us 'TXJXcJee8SYeheHSk'
+        room_id = card.to.id if hasattr(card.to, 'id') else str(card.to)
 
-        # 1. Resolve the destination room ID using our updated architecture
-        destination = card.to
-        room_id = destination.id if isinstance(destination, Room) else destination.person
+        # 2. Map fields to Rocket.Chat format
+        rc_fields = []
+        if card.fields:
+            for f_title, f_content in card.fields:
+                rc_fields.append({
+                    "title": str(f_title),
+                    "value": str(f_content),
+                    "short": True
+                })
 
-        # 2. Map Errbot Card properties to Rocket.Chat Attachment format
+        # 3. Construct the attachment block
         attachment = {
             "title": card.title if card.title else "",
             "text": card.body if card.body else "",
-            "color": card.color if card.color else "#0071bc", # Default blue bar
+            "color": card.color if card.color else "#FFA500",
+            "fields": rc_fields
         }
 
-        # Add optional thumbnail/image if provided
-        if card.thumbnail:
-            attachment["thumb_url"] = card.thumbnail
-        if card.image:
-            attachment["image_url"] = card.image
-
-        # 3. Map Card Fields to Structured Attachment Fields
-        if card.fields:
-            attachment["fields"] = [
-                {
-                    "title": f_title,
-                    "value": f_content,
-                    "short": len(str(f_content)) < 25 # Side-by-side if short
-                }
-                for f_title, f_content in card.fields
-            ]
-
-        # 4. Construct the final Message Payload structure
+        # 4. Rocket.Chat needs a clean message structure
+        # 'msg' is the main body text. If it's empty, Rocket.Chat sometimes ignores the attachment.
         msg_payload = {
             "rid": room_id,
-            "msg": card.summary if card.summary else "", # Main text above the card
+            "msg": card.summary if card.summary else (card.title if card.title else "Notification"),
             "attachments": [attachment]
         }
 
-        # 5. Dispatch via your DDP/Meteor Client
-        self.send_rocketchat_message(params=msg_payload)
+        # LOGGING: See exactly what we are sending down the WebSocket
+        self.log.exception(f"RocketChat Backend send_card Payload: {msg_payload}")
+
+        # 5. Define a callback to catch server-side rejections
+        def card_callback(error, result):
+            if error:
+                self.log.exception(f"Rocket.Chat Server rejected the card: {error}")
+            else:
+                self.log.exception(f"Rocket.Chat Card sent successfully! Result: {result}")
+
+        # 6. Dispatch
+        try:
+            self._meteor_client.call(
+                method="sendMessage", 
+                params=[msg_payload], 
+                callback=card_callback
+            )
+        except Exception as e:
+            self.log.exception(f"Failed to execute DDP call for send_card: {e}")
 
     def send_message(self, mess):
         """
