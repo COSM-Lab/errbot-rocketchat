@@ -1341,7 +1341,7 @@ class RocketChat(ErrBot):
 
     from errbot.backends.base import Card, Room
 
-    def send_card(self, card):
+    def send_card(self, card, in_reply_to=None):
         """
         Renders an Errbot Card using high-fidelity Markdown blocks,
         bypassing the strict DDP schema limitation natively.
@@ -1374,7 +1374,7 @@ class RocketChat(ErrBot):
 
         # 4. Handle Threading (tmid)
         # Determine if there's a parent message context to thread into
-        parent_msg = getattr(card, 'in_reply_to', None)
+        parent_msg = in_reply_to or getattr(card, 'in_reply_to', None)
         
         if parent_msg:
             # Rocket.Chat message IDs are stored inside the extra message info or message ID attributes
