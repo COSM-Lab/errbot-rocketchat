@@ -1372,7 +1372,28 @@ class RocketChat(ErrBot):
             "msg": full_markdown_text
         }
 
-        # 4. Dispatch safely via the working text stream
+        # 4. Handle Threading (tmid)
+        # Determine if there's a parent message context to thread into
+        parent_msg = getattr(card, 'in_reply_to', None)
+        
+        if parent_msg:
+            # Rocket.Chat message IDs are stored inside the extra message info or message ID attributes
+            # Depending on how your backend parses incoming messages, grab its unique server '_id'
+            parent_id = None
+            
+            if hasattr(parent_msg, 'extras') and 'msg_info' in parent_msg.extras:
+                parent_id = parent_msg.extras['msg_info'].get('_id')
+            elif hasattr(parent_msg, 'id'):
+                parent_id = parent_msg.id
+
+            # If we successfully found the parent message ID, attach it as the thread root
+            if parent_id:
+                msg_payload["tmid"] = str(parent_id)
+                
+                # Optional: 'tshow' makes the threaded reply also broadcast to the main channel
+                # msg_payload["tshow"] = False 
+
+        # 5. Dispatch safely via the working DDP text stream
         self._meteor_client.call("sendMessage", [msg_payload])
 
     def send_message(self, mess):
