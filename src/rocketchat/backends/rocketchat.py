@@ -1375,7 +1375,7 @@ class RocketChat(ErrBot):
             "_id": msg_id,
             "rid": room_id,
             "msg": str(card.summary) if card.summary else "",
-            "attachments": [attachment]
+            "customFields": [attachment]
         }
 
         # CRITICAL: Rocket.Chat's real-time sendMessage method expects the first parameter 
