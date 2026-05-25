@@ -1372,8 +1372,8 @@ class RocketChat(ErrBot):
             "msg": full_markdown_text
         }
 
-    # 4. Dispatch safely via the working text stream
-    self._meteor_client.call("sendMessage", [msg_payload])
+        # 4. Dispatch safely via the working text stream
+        self._meteor_client.call("sendMessage", [msg_payload])
 
     def send_message(self, mess):
         """
