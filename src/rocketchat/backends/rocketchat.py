@@ -1343,62 +1343,37 @@ class RocketChat(ErrBot):
 
     def send_card(self, card):
         """
-        Transforms an Errbot Card object into a native Rocket.Chat attachment payload.
-        Ensures structural compliance with Rocket.Chat's realtime Meteor match types.
+        Renders an Errbot Card using high-fidelity Markdown blocks,
+        bypassing the strict DDP schema limitation natively.
         """
-        # 1. Extract clean target stream string
         room_id = card.to.id if hasattr(card.to, 'id') else str(card.to)
 
-        # 2. Build explicit typed fields
-        rc_fields = []
+        # 1. Start with the summary or title as a header
+        lines = []
+        if card.summary:
+            lines.append(f"### {card.summary}")
+        if card.title:
+            lines.append(f"**{card.title}**")
+        if card.body:
+            lines.append(f"> {card.body}")
+
+        # 2. Format the fields as a clean definition list or block
         if card.fields:
-            for f_title, f_content in card.fields:
-                rc_fields.append({
-                    "title": str(f_title),
-                    "value": str(f_content),
-                    "short": True # Must be native boolean True/False
-                })
+            lines.append("") # Spacer
+            for title, value in card.fields:
+                lines.append(f"• *{title}:* {value}")
 
-        # 3. Create structural attachment dictionary
-        attachment = {
-            "title": str(card.title) if card.title else "",
-            "text": str(card.body) if card.body else "",
-            "color": str(card.color) if card.color else "#FFA500",
-            "fields": rc_fields
-        }
+        # Assemble into a clean single string payload
+        full_markdown_text = "\n".join(lines)
 
-        # 4. Generate client-side validation message hash
-        msg_id = ''.join(random.choices(string.ascii_letters + string.digits, k=17))
-
-        # 5. Build standard inner message configuration block
-        message_block = {
-            "_id": msg_id,
+        # 3. Build a standard compliant message structure
+        msg_payload = {
             "rid": room_id,
-            "msg": str(card.summary) if card.summary else "",
-            "customFields": [attachment]
+            "msg": full_markdown_text
         }
 
-        # CRITICAL: Rocket.Chat's real-time sendMessage method expects the first parameter 
-        # to be a wrapper object containing a literal "message" dictionary key attribute.
-        wrapped_payload = {
-            "message": message_block
-        }
-
-        def card_callback(error, result):
-            if error:
-                self._log_debug(f"Rocket.Chat Server structural rejection: {error}")
-            else:
-                self._log_debug(f"Card successfully delivered! Message ID: {msg_id}")
-
-        # 6. Push payload container down the DDP socket stream
-        try:
-            self._meteor_client.call(
-                method="sendMessage", 
-                params=[message_block], # If your client library automatically pulls the args, or use [wrapped_payload] if needed
-                callback=card_callback
-            )
-        except Exception as e:
-            self._log_debug(f"Critical exception processing DDP transmission: {e}")
+    # 4. Dispatch safely via the working text stream
+    self._meteor_client.call("sendMessage", [msg_payload])
 
     def send_message(self, mess):
         """
