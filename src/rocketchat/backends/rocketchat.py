@@ -1366,42 +1366,7 @@ class RocketChat(ErrBot):
         # Assemble into a clean single string payload
         full_markdown_text = "\n".join(lines)
 
-        # 3. Build a standard compliant message structure
-        msg_payload = {
-            "rid": room_id,
-            "msg": full_markdown_text
-        }
-
-        # 4. Extract Thread Metadata (tmid) matching Errbot's internal property mapping
-        parent_msg = getattr(card, 'in_reply_to', None)
-        
-        if parent_msg:
-            parent_id = None
-            
-            # Scenario A: Try extracting the raw Rocket.Chat message ID hash from extras
-            if hasattr(parent_msg, 'extras') and parent_msg.extras:
-                msg_info = parent_msg.extras.get('msg_info', {}) or {}
-                parent_id = msg_info.get('_id')
-                
-                # Fallback check if your scheduler stored it under a different sub-key
-                if not parent_id and 'orig_msg' in parent_msg.extras:
-                    orig = parent_msg.extras['orig_msg']
-                    if hasattr(orig, 'extras') and orig.extras:
-                        parent_id = orig.extras.get('msg_info', {}).get('_id')
-
-            # Scenario B: Try extracting the generic Errbot ID attribute if available
-            if not parent_id and hasattr(parent_msg, 'id'):
-                parent_id = parent_msg.id
-
-            # If we successfully isolated a string token ID, inject it into the DDP schema
-            if parent_id:
-                msg_payload["tmid"] = str(parent_id)
-                
-                # Optional: Set to True if you want the threaded card to also show up in the main room stream
-                # msg_payload["tshow"] = False
-
-        # 5. Dispatch safely via the working DDP text stream
-        self._meteor_client.call("sendMessage", [msg_payload])
+        self.send(room_id, full_markdown_text, in_reply_to=card.in_reply_to)
 
     def send_message(self, mess):
         """
