@@ -1366,7 +1366,10 @@ class RocketChat(ErrBot):
         # Assemble into a clean single string payload
         full_markdown_text = "\n".join(lines)
 
-        self.send(room_id, full_markdown_text, in_reply_to=card.in_reply_to)
+        # Safely extract the original reply message using Errbot's 'parent' attribute mapping
+        parent_msg = getattr(card, 'parent', None)
+
+        self.send(room_id, full_markdown_text, in_reply_to=parent_msg)
 
     def send_message(self, mess):
         """
