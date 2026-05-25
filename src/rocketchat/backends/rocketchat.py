@@ -1374,14 +1374,14 @@ class RocketChat(ErrBot):
         }
 
         # LOGGING: See exactly what we are sending down the WebSocket
-        self.log.exception(f"RocketChat Backend send_card Payload: {msg_payload}")
+        self._log_debug(f"RocketChat Backend send_card Payload: {msg_payload}")
 
         # 5. Define a callback to catch server-side rejections
         def card_callback(error, result):
             if error:
-                self.log.exception(f"Rocket.Chat Server rejected the card: {error}")
+                self._log_debug(f"Rocket.Chat Server rejected the card: {error}")
             else:
-                self.log.exception(f"Rocket.Chat Card sent successfully! Result: {result}")
+                self._log_debug(f"Rocket.Chat Card sent successfully! Result: {result}")
 
         # 6. Dispatch
         try:
@@ -1391,7 +1391,7 @@ class RocketChat(ErrBot):
                 callback=card_callback
             )
         except Exception as e:
-            self.log.exception(f"Failed to execute DDP call for send_card: {e}")
+            self._log_debug(f"Failed to execute DDP call for send_card: {e}")
 
     def send_message(self, mess):
         """
